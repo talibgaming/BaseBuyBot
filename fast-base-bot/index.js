@@ -130,17 +130,10 @@ async function prompt(question) {
     for (const fee of v3FeeTiers) {
       params.fee = fee;
       try {
-        const feeData = await provider.getFeeData();
-        let overrides = {};
-        if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-          // Set maxPriorityFeePerGas to a reasonable value, but not more than maxFeePerGas
-          const priority = feeData.maxPriorityFeePerGas.add(ethers.utils.parseUnits('2', 'gwei'));
-          const maxFee = feeData.maxFeePerGas.mul(2);
-          overrides.maxFeePerGas = maxFee;
-          overrides.maxPriorityFeePerGas = priority.gt(maxFee) ? maxFee : priority;
-        } else if (feeData.gasPrice) {
-          overrides.gasPrice = feeData.gasPrice.mul(2);
-        }
+       let overrides = {
+      gasPrice: ethers.utils.parseUnits("0.1", "gwei") // fixed at 0.1 gwei
+      };
+
         overrides.gasLimit = await uniRouter.estimateGas.exactInputSingle(params, { value: AMOUNT_IN });
         tx = await uniRouter.exactInputSingle(params, { ...overrides, value: AMOUNT_IN });
         console.log(`✅ Uniswap v3 swap sent (fee: ${fee/10000}%). Tx Hash: ${tx.hash}`);
