@@ -1,6 +1,12 @@
 {
   "dependencies": {
+    "body-parser": "^2.2.0",
     "dotenv": "^17.0.1",
-    "ethers": "^5.8.0"
-  }
+    "ethers": "^5.8.0",
+    "express": "^5.1.0"
+  },
+  "scripts": {
+  "start": "node index.js"
+},
+  "proxy": "http://localhost:3001"
 }

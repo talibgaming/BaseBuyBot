@@ -1,5 +1,10 @@
 require('dotenv').config();
 const { ethers } = require('ethers');
+const express = require('express');
+const bodyParser = require('body-parser');
+const app = express();
+const PORT = process.env.PORT || 3001;
+app.use(bodyParser.json());
 
 // Load environment configuration
 const RPC_URL = process.env.ALCHEMY_BASE_RPC;
@@ -94,101 +99,90 @@ async function prompt(question) {
   }));
 }
 
-(async () => {
-  try {
-    // Get token address from argument or prompt
-    let tokenAddress = process.argv[2];
-    if (!tokenAddress) {
-      tokenAddress = await prompt("Enter the token contract address to buy: ");
+async function performSwap({ tokenAddress, ethAmount, gasGwei }) {
+  if (!ethers.utils.isAddress(tokenAddress)) {
+    throw new Error(`Invalid token address: ${tokenAddress}`);
+  }
+  const AMOUNT_IN = ethers.utils.parseEther(ethAmount); // ETH amount as string
+  const recipient = await wallet.getAddress();
+  const params = {
+    tokenIn: WETH_ADDRESS,
+    tokenOut: tokenAddress,
+    fee: 10000, // 1% pool fee for v4
+    recipient: recipient,
+    amountIn: AMOUNT_IN,
+    amountOutMinimum: 0,
+    sqrtPriceLimitX96: 0
+  };
+  let tx;
+  let v3Success = false;
+  const v3FeeTiers = [10000, 100, 500];
+  for (const fee of v3FeeTiers) {
+    params.fee = fee;
+    try {
+      let overrides = {
+        gasPrice: ethers.utils.parseUnits(gasGwei, "gwei")
+      };
+      overrides.gasLimit = await uniRouter.estimateGas.exactInputSingle(params, { value: AMOUNT_IN });
+      tx = await uniRouter.exactInputSingle(params, { ...overrides, value: AMOUNT_IN });
+      v3Success = true;
+      break;
+    } catch (uniErr) {
+      // continue
     }
-    if (!ethers.utils.isAddress(tokenAddress)) {
-      throw new Error(`Invalid token address: ${tokenAddress}`);
-    }
-    tokenAddress = tokenAddress.trim();
-    console.log(`\n🔗 Target Token: ${tokenAddress}`);
-
-    // Define swap parameters
-    const AMOUNT_IN = ethers.utils.parseEther("0.001");  // 0.001 ETH
-    const recipient = await wallet.getAddress();
-    const deadline = Math.floor(Date.now()/1000) + 10;  // 1 minute from now (for v2 swap)
-
-    // Prepare Uniswap v3 exactInputSingle params (WETH -> token)
-    const params = {
-      tokenIn: WETH_ADDRESS,
-      tokenOut: tokenAddress,
-      fee: 10000,  // 1% pool fee for v4
-      recipient: recipient,
-      amountIn: AMOUNT_IN,
-      amountOutMinimum: 0,        // slippage 0: accept any amount out
-      sqrtPriceLimitX96: 0        // no price limit
-    };
-
-    let tx;
-    // Try Uniswap v3 (priority 1, all fee tiers)
-    let v3Success = false;
-    const v3FeeTiers = [10000, 100, 500];
-    for (const fee of v3FeeTiers) {
+  }
+  let v4Success = false;
+  if (!v3Success) {
+    const v4FeeTiers = [10000, 100];
+    for (const fee of v4FeeTiers) {
       params.fee = fee;
       try {
-       let overrides = {
-      gasPrice: ethers.utils.parseUnits("0.1", "gwei") // fixed at 0.1 gwei
-      };
-
-        overrides.gasLimit = await uniRouter.estimateGas.exactInputSingle(params, { value: AMOUNT_IN });
-        tx = await uniRouter.exactInputSingle(params, { ...overrides, value: AMOUNT_IN });
-        console.log(`✅ Uniswap v3 swap sent (fee: ${fee/10000}%). Tx Hash: ${tx.hash}`);
-        v3Success = true;
+        const v4GasLimit = await uniV4Router.estimateGas.exactInputSingle(params, { value: AMOUNT_IN }).then(g => g.mul(12).div(10)).catch(() => 600000);
+        const v4Overrides = { gasLimit: v4GasLimit, value: AMOUNT_IN };
+        tx = await uniV4Router.exactInputSingle(params, v4Overrides);
+        v4Success = true;
         break;
-      } catch (uniErr) {
-        console.warn(`⚠️ Uniswap v3 swap failed (fee: ${fee/10000}%): ${uniErr.message}`);
+      } catch (v4Err) {
+        // continue
       }
     }
-    // If v3 fails, try Uniswap v4 (priority 2, all fee tiers)
-    let v4Success = false;
-    if (!v3Success) {
-      const v4FeeTiers = [10000, 100];
-      for (const fee of v4FeeTiers) {
-        params.fee = fee;
-        try {
-          const v4GasLimit = await uniV4Router.estimateGas.exactInputSingle(params, { value: AMOUNT_IN }).then(g => g.mul(12).div(10)).catch(() => 600000);
-          const v4Overrides = { gasLimit: v4GasLimit, value: AMOUNT_IN };
-          tx = await uniV4Router.exactInputSingle(params, v4Overrides);
-          console.log(`✅ Uniswap v4 swap sent (fee: ${fee/10000}%). Tx Hash: ${tx.hash}`);
-          v4Success = true;
-          break;
-        } catch (v4Err) {
-          console.warn(`⚠️ Uniswap v4 swap failed (fee: ${fee/10000}%): ${v4Err.message}`);
-        }
-      }
-    }
-    if (!v3Success && !v4Success) {
-      throw new Error('All swap attempts failed. No available pool or all transactions reverted.');
-    }
-
-    // Wait for transaction confirmation
-    console.log("⌛ Waiting for transaction confirmation...");
-    const receipt = await tx.wait();
-    if (receipt.status !== 1) {
-      throw new Error("Transaction failed or was reverted.");
-    }
-    console.log(`🎉 Transaction confirmed in block ${receipt.blockNumber}.`);
-
-    // Fetch token balance of the wallet to show result
-    const tokenContract = new ethers.Contract(tokenAddress, [
-      "function balanceOf(address) view returns (uint256)",
-      "function decimals() view returns (uint8)",
-      "function symbol() view returns (string)"
-    ], provider);
-    const [balanceAfter, decimals, symbol] = await Promise.all([
-      tokenContract.balanceOf(recipient),
-      tokenContract.decimals().catch(()=>18),
-      tokenContract.symbol().catch(()=>"(token)")
-    ]);
-    const balanceFormatted = ethers.utils.formatUnits(balanceAfter, decimals);
-    console.log(`✅ Swap successful! Bought ~${balanceFormatted} ${symbol} with 0.001 ETH.`);
-    console.log(`   View transaction: https://basescan.org/tx/${tx.hash}\n`);
-  } catch (err) {
-    console.error(`\n❌ Error: ${err.message}\n`);
-    process.exit(1);
   }
-})();
+  if (!v3Success && !v4Success) {
+    throw new Error('All swap attempts failed. No available pool or all transactions reverted.');
+  }
+  const receipt = await tx.wait();
+  if (receipt.status !== 1) {
+    throw new Error("Transaction failed or was reverted.");
+  }
+  const tokenContract = new ethers.Contract(tokenAddress, [
+    "function balanceOf(address) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)"
+  ], provider);
+  const [balanceAfter, decimals, symbol] = await Promise.all([
+    tokenContract.balanceOf(recipient),
+    tokenContract.decimals().catch(()=>18),
+    tokenContract.symbol().catch(()=>"(token)")
+  ]);
+  const balanceFormatted = ethers.utils.formatUnits(balanceAfter, decimals);
+  return {
+    txHash: tx.hash,
+    blockNumber: receipt.blockNumber,
+    tokenSymbol: symbol,
+    tokenBalance: balanceFormatted
+  };
+}
+
+app.post('/api/swap', async (req, res) => {
+  const { tokenAddress, ethAmount, gasGwei } = req.body;
+  try {
+    const result = await performSwap({ tokenAddress, ethAmount, gasGwei });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Swap API server running on port ${PORT}`);
+});
