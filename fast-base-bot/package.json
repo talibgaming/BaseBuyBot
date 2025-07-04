@@ -10,5 +10,6 @@
 },
   "tokenAddress": "0x...",
   "ethAmount": "0.01",
-  "gasGwei": "7"
+  "gasGwei": "7",
+  "apiUrl": "https://basebuybot-iq40.onrender.com/api/swap"
 }
