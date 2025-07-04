@@ -5,8 +5,11 @@
     "ethers": "^5.8.0",
     "express": "^5.1.0"
   },
-  "scripts": {
-  "start": "node server.js"
+ "scripts": {
+  "start": "node index.js"
+},
+"engines": {
+  "node": "18.x"
 },
   "tokenAddress": "0x...",
   "ethAmount": "0.01",
