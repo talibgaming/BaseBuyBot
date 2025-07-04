@@ -35,7 +35,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "proxy": "http://localhost:3001",
-  "devPorts": [3000, 3001, 3002, 3003, 3004, 3005]
+  }
 }

@@ -173,6 +173,10 @@ async function performSwap({ tokenAddress, ethAmount, gasGwei }) {
   };
 }
 
+app.get('/', (req, res) => {
+  res.send('BaseBuyBot API is running. Use POST /api/swap to trade.');
+});
+
 app.post('/api/swap', async (req, res) => {
   const { tokenAddress, ethAmount, gasGwei } = req.body;
   try {
