@@ -7,6 +7,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 app.use(bodyParser.json());
 app.use(cors());
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ success: false, error: "Server crashed unexpectedly." });
+});
 
 // Load environment configuration
 const RPC_URL = process.env.ALCHEMY_BASE_RPC;
@@ -185,16 +189,17 @@ app.post('/api/swap', async (req, res) => {
   const { tokenAddress, ethAmount, gasGwei } = req.body;
   try {
     const result = await performSwap({ tokenAddress, ethAmount, gasGwei });
-    res.json({ success: true, ...result });
+    res.json({ success: true, ...result });  // ✅ JSON output
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: err.message }); // ✅ JSON error
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Swap API server running on port ${PORT}`);
 });
-
+let data;
 try {
   const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/swap`, {
     method: "POST",
@@ -205,13 +210,13 @@ try {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Server responded with ${res.status}: ${text}`);
+    const text = await res.text(); // capture raw server error text
+    throw new Error(`Server error ${res.status}: ${text}`);
   }
 
-  const data = await res.json();
-  console.log("Swap response:", data);
+  data = await res.json(); // only if content is valid JSON
 } catch (err) {
-  console.error("Swap failed:", err.message);
+  console.error("JSON parsing failed:", err.message);
+  alert(`Swap failed: ${err.message}`);
+  return;
 }
-// Export the performSwap function for testing or other use
