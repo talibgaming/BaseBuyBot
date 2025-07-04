@@ -179,7 +179,7 @@ app.get('/', (req, res) => {
   res.send('BaseBuyBot API is running. Use POST /api/swap to trade.');
 });
 
-const apiUrl = "https://basebuybot-iq40.onrender.com/api/swap";
+const apiUrl = `${process.env.REACT_APP_BACKEND_URL}/api/swap`
 
 app.post('/api/swap', async (req, res) => {
   const { tokenAddress, ethAmount, gasGwei } = req.body;
@@ -195,41 +195,8 @@ app.listen(PORT, () => {
   console.log(`Swap API server running on port ${PORT}`);
 });
 
-// Client-side code (for testing or usage in a browser environment)
-// Uncomment and use in a suitable environment
-/*
-async function clientSwapExample() {
-  const tokenAddress = "0x..."; // Replace with actual token address
-  const ethAmount = "0.1"; // Amount of ETH to swap
-  const gasGwei = "100"; // Gas price in Gwei
-
-  // Directly call the performSwap function (ensure wallet and provider are accessible)
-  try {
-    const result = await performSwap({ tokenAddress, ethAmount, gasGwei });
-    console.log("Swap successful:", result);
-  } catch (error) {
-    console.error("Swap failed:", error);
-  }
-
-  // Example of using the API endpoint
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ tokenAddress, ethAmount, gasGwei }),
-  });
-
-  let data;
-  try {
-    data = await response.json();
-  } catch (e) {
-    throw new Error("Server returned invalid JSON or no response.");
-  }
-
-  console.log("API response:", data);
-}
-
-// For testing: call the client example function
-clientSwapExample();
-*/
+const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/swap`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ tokenAddress, ethAmount, gasGwei }),
+});
