@@ -6,7 +6,7 @@
     "express": "^5.1.0"
   },
   "scripts": {
-  "start": "node index.js"
+  "start": "node server.js"
 },
   "tokenAddress": "0x...",
   "ethAmount": "0.01",
