@@ -195,8 +195,23 @@ app.listen(PORT, () => {
   console.log(`Swap API server running on port ${PORT}`);
 });
 
-const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/swap`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tokenAddress, ethAmount, gasGwei }),
-});
+try {
+  const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/swap`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ tokenAddress, ethAmount, gasGwei })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Server responded with ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  console.log("Swap response:", data);
+} catch (err) {
+  console.error("Swap failed:", err.message);
+}
+// Export the performSwap function for testing or other use
